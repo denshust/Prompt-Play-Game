@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VIP Jam Gallery</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #020205; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: white; user-select: none; }
+        
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; background: rgba(255,255,255,0.8); border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; z-index: 10; box-shadow: 0 0 8px #fff; }
+        
+        #blocker { position: absolute; width: 100%; height: 100%; background: radial-gradient(circle, rgba(10,10,20,0.8) 0%, rgba(2,2,5,0.95) 100%); display: flex; justify-content: center; align-items: center; z-index: 20; backdrop-filter: blur(10px); }
+        
+        #instructions { text-align: center; cursor: pointer; padding: 50px; border: 1px solid rgba(0, 255, 255, 0.2); border-radius: 20px; background: rgba(10,10,15,0.7); box-shadow: 0 0 50px rgba(0, 255, 255, 0.1); transition: transform 0.2s; }
+        #instructions:hover { transform: scale(1.02); border-color: rgba(0, 255, 255, 0.5); }
+        #instructions h1 { font-size: 45px; color: #00ffff; text-shadow: 0 0 20px rgba(0, 255, 255, 0.5); text-transform: uppercase; margin-bottom: 15px; letter-spacing: 2px; }
+        #instructions p { font-size: 18px; color: #ccc; line-height: 1.6; margin: 0; }
+        #instructions span { color: #ff0055; font-weight: bold; }
+        
+        #game-ui { position: absolute; right: -450px; top: 50%; transform: translateY(-50%); width: 380px; background: rgba(10,10,15,0.85); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.05); border-left: 4px solid #00ffff; border-radius: 16px 0 0 16px; padding: 30px; box-shadow: -15px 0 50px rgba(0,0,0,0.9); transition: right 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); z-index: 15; pointer-events: none; }
+        #game-ui.visible { right: 0; }
+        
+        .place-badge { position: absolute; top: -20px; left: -20px; width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 900; box-shadow: 0 5px 15px rgba(0,0,0,0.5); border: 2px solid rgba(255,255,255,0.2); text-shadow: 1px 1px 2px rgba(0,0,0,0.5); }
+        
+        #game-ui img { width: 100%; height: 220px; object-fit: cover; background: #000; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
+        #game-ui h2 { margin: 0 0 8px 0; font-size: 28px; text-transform: uppercase; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+        #game-ui h4 { margin: 0 0 15px 0; font-size: 16px; color: #00ffff; font-weight: 500; }
+        
+        .desc-container { max-height: 140px; overflow-y: auto; margin-bottom: 25px; padding-right: 10px; font-size: 15px; line-height: 1.5; color: #bbb; }
+        .desc-container::-webkit-scrollbar { width: 6px; }
+        .desc-container::-webkit-scrollbar-thumb { background: rgba(0,255,255,0.3); border-radius: 3px; }
+        
+        .play-btn { display: block; text-align: center; background: linear-gradient(45deg, #ff0055, #ff4488); color: #fff; padding: 18px; border-radius: 8px; font-weight: bold; font-size: 18px; text-transform: uppercase; letter-spacing: 1px; box-shadow: 0 0 20px rgba(255, 0, 85, 0.4); }
+    </style>
+</head>
+<body>
+    <div id="crosshair"></div>
+    <div id="blocker">
+        <div id="instructions">
+            <h1>Зал Слави Jam</h1>
+            <p><b>WASD</b> — Рух | <b>Миша</b> — Огляд<br>Натисніть <span>[E]</span> біля гри, щоб відкрити Itch.io<br><br><i>Клікніть, щоб почати</i></p>
+        </div>
+    </div>
+    
+    <div id="game-ui">
+        <div id="ui-badge" class="place-badge"></div>
+        <img id="ui-img" src="" alt="Game Preview">
+        <h2 id="ui-title"></h2>
+        <h4 id="ui-author"></h4>
+        <div class="desc-container"><p id="ui-desc"></p></div>
+        <div class="play-btn">Натисніть [E] для гри</div>
+    </div>
+
+    <script src="gamesData.js"></script>
+    <script type="importmap"> { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } } </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+        // --- 1. СЦЕНА ТА ГАЛАКТИЧНЕ НЕБО ---
+        const scene = new THREE.Scene();
+        const texLoader = new THREE.TextureLoader();
+
+        texLoader.load('https://api.allorigins.win/raw?url=https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_atmos_2048.jpg', (tex) => {
+            const skyGeo = new THREE.SphereGeometry(100, 64, 64);
+            const skyMat = new THREE.MeshBasicMaterial({ 
+                map: tex, 
+                side: THREE.BackSide, 
+                color: 0x221144 
+            });
+            const sky = new THREE.Mesh(skyGeo, skyMat);
+            scene.add(sky);
+        });
+
+        const starsGeom = new THREE.BufferGeometry();
+        const starsPos = [];
+        for(let i=0; i<3000; i++) {
+            starsPos.push((Math.random()-0.5)*150, (Math.random()-0.5)*100, (Math.random()-0.5)*150);
+        }
+        starsGeom.setAttribute('position', new THREE.Float32BufferAttribute(starsPos, 3));
+        const starsMat = new THREE.PointsMaterial({color: 0xffffff, size: 0.1});
+        scene.add(new THREE.Points(starsGeom, starsMat));
+
+        scene.fog = new THREE.FogExp2(0x020205, 0.015); 
+
+        const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 1.7, 20); 
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+
+        // --- 2. ПІДЛОГА ТА ТАЙЛИ ---
+        const floorGeo = new THREE.PlaneGeometry(200, 200); 
+        const floorTexture = texLoader.load('https://api.allorigins.win/raw?url=https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/terrain/grasslight-big.jpg'); 
+        floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping;
+        floorTexture.repeat.set(20, 20);
+
+        const floorMat = new THREE.MeshStandardMaterial({ 
+            map: floorTexture, 
+            color: 0x111122, 
+            roughness: 0.2, 
+            metalness: 0.7 
+        });
+        const floor = new THREE.Mesh(floorGeo, floorMat);
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        const grid = new THREE.GridHelper(200, 100, 0x00ffff, 0xff0055);
+        grid.position.y = 0.01; grid.material.opacity = 0.3; grid.material.transparent = true;
+        scene.add(grid);
+
+        const tiles = [];
+        const tileGeo = new THREE.PlaneGeometry(0.5, 0.5); 
+        for (let z = -35; z < 35; z += 1.0) { 
+            for (let x = -35; x <= 35; x += 1.0) {
+                const tileMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0 });
+                const tile = new THREE.Mesh(tileGeo, tileMat);
+                tile.position.set(x, 0.02, z); tile.rotation.x = -Math.PI / 2;
+                scene.add(tile);
+                tiles.push(tile);
+            }
+        }
+
+        // --- 3. ГЕНЕРАТОР ХВИЛЯСТИХ ІСКОР (МЕНШЕ ІСКОР!) ---
+        function createCircleTexture() {
+            const canvas = document.createElement('canvas'); canvas.width = 64; canvas.height = 64;
+            const ctx = canvas.getContext('2d'); ctx.beginPath(); ctx.arc(32, 32, 28, 0, Math.PI * 2); ctx.fillStyle = '#ffffff'; ctx.fill();
+            ctx.shadowBlur = 15; ctx.shadowColor = '#ffffff';
+            return new THREE.CanvasTexture(canvas);
+        }
+        const sparkTexture = createCircleTexture();
+        const activeParticleSystems = []; 
+
+        function spawnSparks(x, z, colorHex, heightOffset) {
+            const count = 35; // ВИМОГА: Зменшити кількість іскор!
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(count * 3);
+            const velocities = new Float32Array(count); 
+            const phases = new Float32Array(count); // Для хвилястого руху
+
+            for (let i = 0; i < count; i++) {
+                positions[i * 3] = x + (Math.random() - 0.5) * 3;     
+                positions[i * 3 + 1] = heightOffset + 1 + Math.random() * 4;         
+                positions[i * 3 + 2] = z + (Math.random() - 0.5) * 3; 
+                velocities[i] = 0.5 + Math.random() * 1.0; // Падають трохи повільніше           
+                phases[i] = Math.random() * Math.PI * 2; // Зміщення хвилі
+            }
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            
+            const material = new THREE.PointsMaterial({ 
+                size: 0.15, map: sparkTexture, color: colorHex, 
+                transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false 
+            });
+            const points = new THREE.Points(geometry, material);
+            scene.add(points);
+            // Зберігаємо оригінальний X та Z, щоб іскри не відлітали вбік назавжди
+            activeParticleSystems.push({ geometry: geometry, velocities: velocities, phases: phases, startX: x, startZ: z, baseY: heightOffset + 2.0 });
+        }
+
+        // --- 4. РОЗСТАНОВКА ІГОР (ВЕЛИЧЕЗНА ВІДСТАНЬ, ПРАВИЛЬНА СТРУКТУРА ТА СВІТІННЯ) ---
+        const stands = [];
+
+        function createTextCanvas(title, author) {
+            const canvas = document.createElement('canvas'); canvas.width = 1024; canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff'; ctx.font = 'bold 70px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(title, 512, 100);
+            ctx.fillStyle = '#00ffff'; ctx.font = '40px sans-serif'; ctx.fillText(`Автор: ${author}`, 512, 170);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        gamesList.forEach(game => {
+            let config = { color: 0x00aaff, h: 0.5, x: 0, z: 0 }; 
+            
+            // ВИМОГА: 1 місце - спереду; 2 та 3 - боки далі; 4, 5, 6 - паралельна лінія ще далі
+            // Камера починає на z: 20 і дивиться в 0. Тому чим менший z, тим далі.
+            if (game.place === 1) config = { color: 0xffd700, h: 1.4, x: 0, z: 8 }; 
+            else if (game.place === 2) config = { color: 0xc0c0c0, h: 1.1, x: -12, z: -2 }; 
+            else if (game.place === 3) config = { color: 0xcd7f32, h: 0.8, x: 12, z: -2 }; 
+            else { 
+                config.z = -14; // Лінія паралельно позаду
+                config.x = game.place === 4 ? -18 : (game.place === 5 ? 0 : 18);
+                config.h = 0.5;
+            }
+
+            // ВИМОГА: П'єдестали мають яскраво світитися! Додано emissive
+            const standMat = new THREE.MeshStandardMaterial({ 
+                color: config.color, 
+                emissive: config.color, 
+                emissiveIntensity: 0.6, // Тепер вони світяться!
+                metalness: 0.8, 
+                roughness: 0.2 
+            });
+            const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.1, config.h, 32), standMat);
+            stand.position.set(config.x, config.h / 2, config.z); stand.castShadow = true;
+            scene.add(stand);
+
+            const spotLight = new THREE.SpotLight(0xffffff, 2.0, 15, Math.PI / 6, 0.5);
+            spotLight.position.set(config.x, config.h + 4, config.z); spotLight.target = stand; spotLight.castShadow = true;
+            scene.add(spotLight);
+
+            const imgMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+            const screen = new THREE.Mesh(new THREE.PlaneGeometry(2.5, 1.5), imgMat);
+            screen.position.set(config.x, config.h + 1.6, config.z);
+            scene.add(screen);
+
+            texLoader.load(game.image, (tex) => {
+                tex.colorSpace = THREE.SRGBColorSpace;
+                const aspect = tex.image.width / tex.image.height;
+                screen.geometry = new THREE.PlaneGeometry(2.5, 2.5 / aspect);
+                imgMat.map = tex; imgMat.color.setHex(0xffffff); imgMat.needsUpdate = true;
+            });
+
+            const textPanel = new THREE.Mesh(
+                new THREE.PlaneGeometry(2.5, 0.6), 
+                new THREE.MeshBasicMaterial({ map: createTextCanvas(game.title, game.author), transparent: true })
+            );
+            textPanel.position.set(config.x, config.h + 0.4, config.z + 0.1);
+            scene.add(textPanel);
+
+            stands.push({ mesh: stand, screen: screen, textPanel: textPanel, data: game });
+
+            if (game.place === 1) spawnSparks(config.x, config.z, 0xFFD700, config.h);
+            else if (game.place === 2) spawnSparks(config.x, config.z, 0xC0C0C0, config.h);
+            else if (game.place === 3) spawnSparks(config.x, config.z, 0xCD7F32, config.h);
+        });
+
+        // --- 5. УПРАВЛІННЯ ---
+        const controls = new PointerLockControls(camera, document.body);
+        const blocker = document.getElementById('blocker');
+        document.getElementById('instructions').addEventListener('click', () => controls.lock());
+        controls.addEventListener('lock', () => blocker.style.display = 'none');
+        controls.addEventListener('unlock', () => blocker.style.display = 'flex');
+        scene.add(controls.getObject());
+
+        const keys = { w: false, a: false, s: false, d: false };
+        const velocity = new THREE.Vector3(); const direction = new THREE.Vector3();
+
+        document.addEventListener('keydown', (e) => {
+            const key = e.code.toLowerCase().replace('key', '');
+            if (keys.hasOwnProperty(key)) keys[key] = true;
+            if (e.code === 'KeyE') openGame();
+        });
+        document.addEventListener('keyup', (e) => {
+            const key = e.code.toLowerCase().replace('key', '');
+            if (keys.hasOwnProperty(key)) keys[key] = false;
+        });
+
+        // --- 6. ЛОГІКА UI ---
+        const ui = document.getElementById('game-ui');
+        const uiBadge = document.getElementById('ui-badge');
+        let activeG = null;
+
+        function updateUI() {
+            let closest = null, minD = 5.0; // Велика відстань для віконечка
+            const pX = camera.position.x;
+            const pZ = camera.position.z;
+
+            stands.forEach(s => {
+                const d = Math.hypot(s.mesh.position.x - pX, s.mesh.position.z - pZ);
+                if (d < minD) { minD = d; closest = s.data; }
+            });
+
+            if (closest !== activeG) {
+                activeG = closest;
+                if (activeG) {
+                    document.getElementById('ui-img').src = activeG.image; 
+                    document.getElementById('ui-title').innerText = activeG.title;
+                    document.getElementById('ui-author').innerText = 'Автор: ' + activeG.author;
+                    document.getElementById('ui-desc').innerText = activeG.description;
+                    
+                    uiBadge.innerText = activeG.place;
+                    if (activeG.place === 1) uiBadge.style.background = 'gold';
+                    else if (activeG.place === 2) uiBadge.style.background = 'silver';
+                    else if (activeG.place === 3) uiBadge.style.background = '#cd7f32';
+                    else uiBadge.style.background = '#00ffff';
+                    
+                    ui.classList.add('visible');
+                } else {
+                    ui.classList.remove('visible');
+                }
+            }
+        }
+
+        function openGame() { if (activeG && controls.isLocked) window.open(activeG.itchUrl, '_blank'); }
+
+        // --- 7. ГОЛОВНИЙ ЦИКЛ (Анімація) ---
+        let prevTime = performance.now();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = performance.now();
+            const delta = Math.min((time - prevTime) / 1000, 0.1); 
+            prevTime = time;
+
+            if (controls.isLocked) {
+                velocity.x -= velocity.x * 10.0 * delta; velocity.z -= velocity.z * 10.0 * delta;
+                
+                direction.z = Number(keys.w) - Number(keys.s); direction.x = Number(keys.d) - Number(keys.a);
+                direction.normalize();
+                
+                const speed = 40.0;
+                if (keys.w || keys.s) velocity.z -= direction.z * speed * delta;
+                if (keys.a || keys.d) velocity.x -= direction.x * speed * delta;
+                
+                controls.moveRight(-velocity.x * delta); controls.moveForward(-velocity.z * delta);
+
+                const pX = camera.position.x;
+                const pZ = camera.position.z;
+
+                // --- ТАЙЛИ ЗАГОРЯЮТЬСЯ ЛИШЕ ПІД НОГАМИ ---
+                tiles.forEach(tile => {
+                    const d = Math.hypot(tile.position.x - pX, tile.position.z - pZ);
+                    if (d < 1.0) { 
+                        tile.material.color.setHex(0x00ffff); 
+                        tile.material.opacity = 0.7; 
+                    }
+                });
+
+                // --- ПОВОРОТ ЕКРАНІВ ТІЛЬКИ ПО ОСІ Y ---
+                stands.forEach(s => {
+                    const dx = pX - s.screen.position.x;
+                    const dz = pZ - s.screen.position.z;
+                    const angle = Math.atan2(dx, dz);
+                    
+                    s.screen.rotation.y = angle;
+                    s.textPanel.rotation.y = angle;
+                });
+
+                updateUI();
+            }
+
+            // --- АНІМАЦІЯ ХВИЛЯСТИХ ІСКОР ---
+            activeParticleSystems.forEach(ps => {
+                const positions = ps.geometry.attributes.position.array;
+                for (let i = 0; i < positions.length / 3; i++) {
+                    let y = positions[i * 3 + 1]; 
+                    y -= ps.velocities[i] * delta; // Падіння
+                    
+                    // Додаємо хвилясте відхилення по X та Z
+                    ps.phases[i] += delta * 2.0; // Швидкість коливання
+                    const waveX = Math.sin(ps.phases[i]) * 0.02;
+                    const waveZ = Math.cos(ps.phases[i]) * 0.02;
+                    
+                    positions[i * 3] += waveX;
+                    positions[i * 3 + 2] += waveZ;
+
+                    // Якщо іскра впала — повертаємо її нагору
+                    if (y < 0) { 
+                        y = ps.baseY + Math.random() * 2; 
+                        // Скидаємо позицію до центру п'єдесталу, щоб іскри не розлітались по всій карті
+                        positions[i * 3] = ps.startX + (Math.random() - 0.5) * 3;
+                        positions[i * 3 + 2] = ps.startZ + (Math.random() - 0.5) * 3;
+                    } 
+                    
+                    positions[i * 3 + 1] = y;
+                }
+                ps.geometry.attributes.position.needsUpdate = true;
+            });
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+        animate();
+    </script>
+</body>
+</html>
