@@ -50,7 +50,7 @@ const gamesList = [
         title: "жаба",
         author: "Oleksiy228",
         description: "Чи зможеш ти дістися жабкою до KFC? Відправляйся в епічну подорож, долаючи перешкоди на шляху до смачної нагороди!",
-        image: "img/_Vf_iQ.png",
+        image: "img/zaba.png",
         itchUrl: "https://oleksiy228.itch.io/675242228",
         place: 6
     }
